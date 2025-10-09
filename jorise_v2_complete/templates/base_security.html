@@ -1,4 +1,3 @@
-{% load static %}
 <!DOCTYPE html>
 <html lang="es" class="h-full bg-gray-100">
 <head>
@@ -13,6 +12,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     
     <!-- Custom CSS -->
+    {% load static %}
     <link rel="stylesheet" type="text/css" href="{% static 'css/security-dashboard.css' %}">
     
     <!-- Tailwind Config -->
@@ -119,7 +119,7 @@
             </div>
         </div>
     
-    <script src="{% static 'js/security-dashboard.js' %}"></script>
+    <script src="/static/js/security-dashboard.js"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

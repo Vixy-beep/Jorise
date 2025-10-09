@@ -1,0 +1,260 @@
+{% extends 'base_security.html' %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<!-- Header with Real-time Threat Level -->
+<div class="mb-8">
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900 mb-2 flex items-center">
+                <i class="fas fa-shield-virus mr-3 text-blue-600"></i>
+                Security Operations Center
+            </h1>
+            <p class="text-gray-600 text-lg">Jorise {{ version }} - Real-time Threat Detection & Response</p>
+        </div>
+        <div class="text-right">
+            <div class="inline-flex items-center bg-green-100 text-green-800 text-sm font-medium px-4 py-2 rounded-lg">
+                <i class="fas fa-check-circle mr-2"></i>
+                Threat Level: LOW
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Critical Stats Row -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="security-card bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
+        <div class="flex justify-between items-start">
+            <div>
+                <h6 class="text-white text-opacity-75 text-sm font-medium mb-2">Threats Blocked</h6>
+                <h2 class="text-3xl font-bold mb-1 counter" data-target="{{ threat_stats.total_threats_blocked }}">0</h2>
+                <div class="text-white text-opacity-75 text-sm">Today: +23</div>
+            </div>
+            <div class="text-white text-opacity-50">
+                <i class="fas fa-shield-alt text-4xl"></i>
+            </div>
+        </div>
+    </div>
+    
+    <div class="security-card bg-gradient-to-br from-pink-500 to-red-500 text-white">
+        <div class="flex justify-between items-start">
+            <div>
+                <h6 class="text-white text-opacity-75 text-sm font-medium mb-2">Active Incidents</h6>
+                <h2 class="text-3xl font-bold mb-1 counter" data-target="{{ threat_stats.active_incidents }}">0</h2>
+                <div class="text-white text-opacity-75 text-sm">
+                    {% if threat_stats.active_incidents > 0 %}
+                        <i class="fas fa-exclamation-triangle mr-1"></i> Requires attention
+                    {% else %}
+                        <i class="fas fa-check mr-1"></i> All clear
+                    {% endif %}
+                </div>
+            </div>
+            <div class="text-white text-opacity-50">
+                <i class="fas fa-exclamation-triangle text-4xl"></i>
+            </div>
+        </div>
+    </div>
+    
+    <div class="security-card bg-gradient-to-br from-cyan-500 to-blue-500 text-white">
+        <div class="flex justify-between items-start">
+            <div>
+                <h6 class="text-white text-opacity-75 text-sm font-medium mb-2">Protected Endpoints</h6>
+                <h2 class="text-3xl font-bold mb-1">{{ threat_stats.endpoints_protected }}</h2>
+                <div class="text-white text-opacity-75 text-sm">
+                    <i class="fas fa-desktop mr-1"></i> Enterprise network
+                </div>
+            </div>
+            <div class="text-white text-opacity-50">
+                <i class="fas fa-desktop text-4xl"></i>
+            </div>
+        </div>
+    </div>
+    
+    <div class="security-card bg-gradient-to-br from-green-500 to-teal-500 text-white">
+        <div class="flex justify-between items-start">
+            <div>
+                <h6 class="text-white text-opacity-75 text-sm font-medium mb-2">System Uptime</h6>
+                <h2 class="text-3xl font-bold mb-1">{{ threat_stats.uptime }}</h2>
+                <div class="text-white text-opacity-75 text-sm">
+                    <i class="fas fa-clock mr-1"></i> Last 30 days
+                </div>
+            </div>
+            <div class="text-white text-opacity-50">
+                <i class="fas fa-chart-line text-4xl"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Security Modules Grid -->
+<div class="row mb-4">
+    <div class="col-12">
+        <h4 class="mb-3">
+            <i class="fas fa-cogs me-2"></i>Enterprise Security Modules
+        </h4>
+    </div>
+    
+    {% for module in security_modules %}
+    <div class="col-xl-4 col-md-6 mb-4">
+        <div class="card security-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div class="d-flex align-items-center">
+                        <div class="rounded-circle bg-{{ module.color }} bg-opacity-10 p-3 me-3">
+                            <i class="{{ module.icon }} fa-2x text-{{ module.color }}"></i>
+                        </div>
+                        <div>
+                            <h5 class="card-title mb-0">{{ module.name }}</h5>
+                            <small class="text-muted">{{ module.full_name }}</small>
+                        </div>
+                    </div>
+                    <span class="badge bg-{{ module.color }}">{{ module.status }}</span>
+                </div>
+                
+                <p class="card-text text-muted small">{{ module.description }}</p>
+                
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        {% if module.alerts > 0 %}
+                            <span class="badge bg-warning">{{ module.alerts }} alerts</span>
+                        {% else %}
+                            <span class="badge bg-success">No alerts</span>
+                        {% endif %}
+                    </div>
+                    <button class="btn btn-outline-{{ module.color }} btn-sm">
+                        <i class="fas fa-external-link-alt me-1"></i>Open
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Recent Security Incidents & Threat Intelligence -->
+<div class="row">
+    <div class="col-md-8">
+        <div class="card security-card">
+            <div class="card-header bg-transparent">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-history me-2"></i>Recent Security Incidents
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Incident Type</th>
+                                <th>Source Module</th>
+                                <th>Severity</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for incident in recent_incidents %}
+                            <tr>
+                                <td><code>{{ incident.time }}</code></td>
+                                <td>{{ incident.type }}</td>
+                                <td>
+                                    <span class="badge bg-secondary">{{ incident.source }}</span>
+                                </td>
+                                <td>
+                                    {% if incident.severity == 'High' %}
+                                        <span class="badge bg-danger">{{ incident.severity }}</span>
+                                    {% elif incident.severity == 'Medium' %}
+                                        <span class="badge bg-warning">{{ incident.severity }}</span>
+                                    {% else %}
+                                        <span class="badge bg-info">{{ incident.severity }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card security-card">
+            <div class="card-header bg-transparent">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-brain me-2"></i>Threat Intelligence
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <h6>Global Threat Level</h6>
+                    <div class="progress mb-2">
+                        <div class="progress-bar bg-warning" style="width: 35%">35%</div>
+                    </div>
+                    <small class="text-muted">Elevated due to recent APT campaigns</small>
+                </div>
+                
+                <div class="mb-3">
+                    <h6>Top Threats Today</h6>
+                    <ul class="list-unstyled">
+                        <li class="d-flex justify-content-between mb-1">
+                            <small>Ransomware</small>
+                            <span class="badge bg-danger">High</span>
+                        </li>
+                        <li class="d-flex justify-content-between mb-1">
+                            <small>Phishing</small>
+                            <span class="badge bg-warning">Medium</span>
+                        </li>
+                        <li class="d-flex justify-content-between mb-1">
+                            <small>Malware</small>
+                            <span class="badge bg-info">Low</span>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="d-grid">
+                    <button class="btn btn-primary btn-sm">
+                        <i class="fas fa-shield-alt me-1"></i>Full Threat Report
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Counter animation
+document.addEventListener('DOMContentLoaded', function() {
+    const counters = document.querySelectorAll('.counter');
+    counters.forEach(counter => {
+        const target = parseInt(counter.getAttribute('data-target'));
+        let current = 0;
+        const increment = target / 100;
+        const timer = setInterval(() => {
+            current += increment;
+            if (current >= target) {
+                counter.textContent = target.toLocaleString();
+                clearInterval(timer);
+            } else {
+                counter.textContent = Math.floor(current).toLocaleString();
+            }
+        }, 20);
+    });
+});
+
+// Real-time updates simulation
+setInterval(() => {
+    // Simulate real-time threat updates
+    const threatBadge = document.querySelector('.threat-indicator');
+    threatBadge.style.animation = 'pulse 1s infinite';
+}, 5000);
+</script>
+{% endblock %}
