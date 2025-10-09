@@ -17,8 +17,18 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 
+from django.contrib import admin
+from django.urls import path, include
+
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include('frontend.urls')),
+    
+    # API endpoints
+    path('api/v1/auth/', include('../../APIs/authentication/urls')),
+    path('api/v1/dashboard/', include('../../APIs/dashboard/urls')),
+    path('api/v1/security/', include('../../APIs/security/urls')),
+    
+    # Legacy endpoints (keep for now)
     path('scan/', include('scan.urls')),
+    path('reports/', include('reports.urls')),
 ]
