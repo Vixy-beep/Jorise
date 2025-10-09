@@ -1,7 +1,0 @@
-INFO 2025-10-08 19:16:57,529 autoreload 96082 140210886058112 Watching for file changes with StatReloader
-INFO 2025-10-08 19:17:20,965 autoreload 96082 140210886058112 /home/rub1r0za/VScode/Jorise/backup_v1_basic/jorise_basic/core/views.py changed, reloading.
-INFO 2025-10-08 19:17:21,413 autoreload 96322 140076425183360 Watching for file changes with StatReloader
-INFO 2025-10-08 19:17:36,744 autoreload 96322 140076425183360 /home/rub1r0za/VScode/Jorise/backup_v1_basic/jorise_basic/scan/views.py changed, reloading.
-INFO 2025-10-08 19:17:37,135 autoreload 96494 140574839554176 Watching for file changes with StatReloader
-INFO 2025-10-08 19:17:58,562 autoreload 96494 140574839554176 /home/rub1r0za/VScode/Jorise/backup_v1_basic/jorise_basic/reports/views.py changed, reloading.
-INFO 2025-10-08 19:17:58,953 autoreload 96708 139898420879488 Watching for file changes with StatReloader
