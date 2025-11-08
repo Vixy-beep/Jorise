@@ -79,7 +79,7 @@ class EDRProcessAdmin(admin.ModelAdmin):
     search_fields = ('process_name', 'process_path')
 
 
-@admin.register(WAFRule)
+@admin.register(WAFLog)
 class WAFLogAdmin(admin.ModelAdmin):
     list_display = ('organization', 'source_ip', 'method', 'status_code', 'blocked', 'timestamp')
     list_filter = ('blocked', 'method', 'status_code', 'timestamp')
