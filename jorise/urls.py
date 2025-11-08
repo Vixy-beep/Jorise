@@ -7,7 +7,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from django.http import JsonResponse
+from core.health_views import health_check
 
 # Optional: Import views only if needed
 try:
@@ -17,23 +17,9 @@ except ImportError:
     login_view = register_view = logout_view = None
     dashboard_view = subscription_management = settings_view = None
 
-def api_health_check(request):
-    """API Health Check endpoint"""
-    return JsonResponse({
-        'status': 'ok',
-        'service': 'Jorise SOC API',
-        'version': '2.0',
-        'message': 'Backend is running successfully',
-        'endpoints': {
-            'admin': '/admin/',
-            'api': '/api/soc/<org_id>/',
-            'modules': ['/siem/', '/edr/', '/waf/', '/sandbox/']
-        }
-    })
-
 urlpatterns = [
     # API Health Check
-    path('', api_health_check, name='api_health'),
+    path('', health_check, name='api_health'),
     
     # Django Admin
     path('admin/', admin.site.urls),
