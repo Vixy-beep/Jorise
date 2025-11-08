@@ -27,17 +27,15 @@ INSTALLED_APPS = [
     # Third party
     'rest_framework',
     'corsheaders',
-    'django_celery_beat',
     
-    # Jorise Apps
+    # Jorise Apps (only existing ones)
     'core',
     'soc',
     'siem',
     'edr',
     'waf',
     'sandbox',
-    'antivirus',
-    'api',
+    'reports',
 ]
 
 MIDDLEWARE = [
