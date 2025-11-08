@@ -28,17 +28,16 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     
-    # Jorise Apps - GRADUAL DEPLOYMENT
-    # Fixed circular imports with lazy loading
-    'scan',      # ✅ Enabled with lazy imports
-    'reports',   # ✅ Enabled with lazy imports
-    # Still disabled - enable one by one after testing:
-    # 'core',
-    # 'soc',
-    # 'siem',
-    # 'edr',
-    # 'waf',
-    # 'sandbox',
+    # Jorise Apps - FULL DEPLOYMENT READY
+    # ✅ All apps properly configured with apps.py and lazy imports
+    'core',      # Base models - must be first
+    'scan',      # Scanning functionality
+    'reports',   # Reporting system
+    'soc',       # Security Operations Center
+    'siem',      # Security Information Event Management
+    'edr',       # Endpoint Detection Response
+    'waf',       # Web Application Firewall
+    'sandbox',   # Malware Sandbox Analysis
 ]
 
 MIDDLEWARE = [

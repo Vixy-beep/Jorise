@@ -1,5 +1,6 @@
 """
 URL Configuration for Jorise v2 - Enterprise SOC
+FULL PRODUCTION ROUTES
 """
 
 from django.contrib import admin
@@ -23,13 +24,13 @@ urlpatterns = [
     path('subscription/', subscription_management, name='subscription_management'),
     path('settings/', settings_view, name='settings'),
     
-    # Module dashboards (views to be created)
+    # Module dashboards
     path('siem/', include('siem.urls')),
     path('edr/', include('edr.urls')),
     path('waf/', include('waf.urls')),
     path('sandbox/', include('sandbox.urls')),
     
-    # API endpoints (existing)
+    # API endpoints
     path('api/soc/<uuid:org_id>/', include('soc.urls')),
     
 ]
