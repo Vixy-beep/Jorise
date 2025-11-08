@@ -25,16 +25,16 @@ class OrganizationAdmin(admin.ModelAdmin):
 
 @admin.register(Subscription)
 class SubscriptionAdmin(admin.ModelAdmin):
-    list_display = ('organization', 'plan', 'status', 'start_date', 'end_date')
+    list_display = ('organization', 'plan', 'status', 'current_period_start', 'current_period_end')
     list_filter = ('plan', 'status')
     search_fields = ('organization__name',)
 
 
 @admin.register(APIKey)
 class APIKeyAdmin(admin.ModelAdmin):
-    list_display = ('organization', 'key_name', 'is_active', 'created_at', 'expires_at')
+    list_display = ('organization', 'name', 'is_active', 'created_at', 'last_used')
     list_filter = ('is_active', 'created_at')
-    search_fields = ('organization__name', 'key_name')
+    search_fields = ('organization__name', 'name')
 
 
 @admin.register(UserProfile)
@@ -53,36 +53,36 @@ class SecurityEventAdmin(admin.ModelAdmin):
 
 @admin.register(ThreatIntelligence)
 class ThreatIntelligenceAdmin(admin.ModelAdmin):
-    list_display = ('ioc_type', 'ioc_value', 'severity', 'first_seen', 'is_active')
-    list_filter = ('ioc_type', 'severity', 'is_active')
+    list_display = ('ioc_type', 'ioc_value', 'threat_level', 'first_seen', 'last_seen')
+    list_filter = ('ioc_type', 'threat_level')
     search_fields = ('ioc_value', 'description')
 
 
 @admin.register(SIEMLog)
 class SIEMLogAdmin(admin.ModelAdmin):
-    list_display = ('organization', 'log_source', 'log_level', 'timestamp')
-    list_filter = ('log_source', 'log_level', 'timestamp')
+    list_display = ('organization', 'source', 'log_level', 'timestamp')
+    list_filter = ('source', 'log_level', 'timestamp')
     search_fields = ('message',)
 
 
 @admin.register(EDRAgent)
 class EDRAgentAdmin(admin.ModelAdmin):
-    list_display = ('organization', 'hostname', 'os', 'status', 'last_seen')
-    list_filter = ('status', 'os')
+    list_display = ('organization', 'hostname', 'os_type', 'status', 'last_seen')
+    list_filter = ('status', 'os_type')
     search_fields = ('hostname', 'ip_address')
 
 
 @admin.register(EDRProcess)
 class EDRProcessAdmin(admin.ModelAdmin):
-    list_display = ('agent', 'process_name', 'pid', 'is_malicious', 'created_at')
-    list_filter = ('is_malicious', 'created_at')
-    search_fields = ('process_name', 'process_path')
+    list_display = ('agent', 'process_name', 'process_id', 'is_suspicious', 'timestamp')
+    list_filter = ('is_suspicious', 'timestamp')
+    search_fields = ('process_name', 'file_path')
 
 
 @admin.register(WAFLog)
 class WAFLogAdmin(admin.ModelAdmin):
-    list_display = ('organization', 'source_ip', 'method', 'status_code', 'blocked', 'timestamp')
-    list_filter = ('blocked', 'method', 'status_code', 'timestamp')
+    list_display = ('organization', 'source_ip', 'method', 'response_code', 'blocked', 'timestamp')
+    list_filter = ('blocked', 'method', 'timestamp')
     search_fields = ('source_ip', 'url')
 
 
@@ -95,13 +95,13 @@ class WAFRuleAdmin(admin.ModelAdmin):
 
 @admin.register(SandboxAnalysis)
 class SandboxAnalysisAdmin(admin.ModelAdmin):
-    list_display = ('organization', 'file_name', 'file_hash', 'threat_level', 'status', 'submitted_at')
-    list_filter = ('threat_level', 'status', 'submitted_at')
-    search_fields = ('file_name', 'file_hash')
+    list_display = ('organization', 'file_name', 'file_hash_sha256', 'verdict', 'status', 'created_at')
+    list_filter = ('verdict', 'status', 'created_at')
+    search_fields = ('file_name', 'file_hash_sha256')
 
 
 @admin.register(UsageMetrics)
 class UsageMetricsAdmin(admin.ModelAdmin):
-    list_display = ('organization', 'metric_type', 'value', 'recorded_at')
-    list_filter = ('metric_type', 'recorded_at')
+    list_display = ('organization', 'date', 'events_count', 'created_at')
+    list_filter = ('date', 'created_at')
     search_fields = ('organization__name',)
