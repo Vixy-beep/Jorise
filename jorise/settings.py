@@ -78,26 +78,37 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'jorise.wsgi.application'
 
-# Database
+# Database configuration with fallback
 database_url = config('DATABASE_URL', default='')
 
-if database_url:
-    # Production: Use PostgreSQL from Render
-    DATABASES = {
-        'default': dj_database_url.config(
-            default=database_url,
-            conn_max_age=600,
-            conn_health_checks=True,
-        )
+# Force SQLite for now (PostgreSQL connection issues on Railway)
+# TODO: Fix PostgreSQL connection and switch back
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
-else:
-    # Development: Use SQLite
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+}
+
+# Alternative: Use PostgreSQL if connection works
+# Uncomment when PostgreSQL is fixed
+# if database_url:
+#     try:
+#         DATABASES = {
+#             'default': dj_database_url.config(
+#                 default=database_url,
+#                 conn_max_age=600,
+#                 conn_health_checks=True,
+#             )
+#         }
+#     except Exception:
+#         # Fallback to SQLite if PostgreSQL fails
+#         DATABASES = {
+#             'default': {
+#                 'ENGINE': 'django.db.backends.sqlite3',
+#                 'NAME': BASE_DIR / 'db.sqlite3',
+#             }
+#         }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
