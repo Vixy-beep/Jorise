@@ -13,7 +13,13 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-this-in-produc
 
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,.railway.app,.up.railway.app,jorise-production.up.railway.app').split(',')
+# ALLOWED_HOSTS configuration
+allowed_hosts_str = config('ALLOWED_HOSTS', default='')
+if allowed_hosts_str:
+    ALLOWED_HOSTS = [host.strip() for host in allowed_hosts_str.split(',')]
+else:
+    # Default hosts for Railway deployment
+    ALLOWED_HOSTS = ['*']  # Allow all hosts in production (Railway handles SSL/domain validation)
 
 # Application definition
 INSTALLED_APPS = [
