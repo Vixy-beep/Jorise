@@ -28,15 +28,16 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     
-    # Jorise Apps (only existing ones)
-    'core',
-    'soc',
-    'siem',
-    'edr',
-    'waf',
-    'sandbox',
-    'scan',
-    'reports',
+    # Jorise Apps - DISABLED FOR INITIAL DEPLOY
+    # Enable these one by one after first successful deploy
+    # 'core',
+    # 'soc',
+    # 'siem',
+    # 'edr',
+    # 'waf',
+    # 'sandbox',
+    # 'scan',
+    # 'reports',
 ]
 
 MIDDLEWARE = [
