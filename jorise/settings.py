@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     'edr',
     'waf',
     'sandbox',
+    'scan',
     'reports',
 ]
 
