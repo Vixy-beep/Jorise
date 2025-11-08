@@ -392,6 +392,7 @@ def waf_dashboard_view(request):
     context = {
         'recent_logs': recent_logs,
         'stats': stats,
+        'organization': organization,
     }
     
-    return render(request, 'dashboard/waf.html', context)
+    return render(request, 'waf/dashboard.html', context)

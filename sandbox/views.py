@@ -454,6 +454,7 @@ def sandbox_dashboard_view(request):
     context = {
         'recent_analyses': recent_analyses,
         'stats': stats,
+        'organization': organization,
     }
     
-    return render(request, 'dashboard/sandbox.html', context)
+    return render(request, 'sandbox/dashboard.html', context)

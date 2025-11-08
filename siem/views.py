@@ -19,9 +19,19 @@ from core.models import (
 from django.db.models import Count, Q
 from collections import defaultdict
 
-# Configurar Gemini AI
-genai.configure(api_key=settings.GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-pro')
+# Configurar Gemini AI (opcional)
+try:
+    import google.generativeai as genai
+    if settings.GEMINI_API_KEY:
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemini-pro')
+        GEMINI_AVAILABLE = True
+    else:
+        GEMINI_AVAILABLE = False
+        model = None
+except (ImportError, Exception):
+    GEMINI_AVAILABLE = False
+    model = None
 
 
 class SIEMAnalyzer:
@@ -30,6 +40,15 @@ class SIEMAnalyzer:
     @staticmethod
     def parse_log(raw_log, source):
         """Parsea un log usando IA para extraer información"""
+        if not GEMINI_AVAILABLE or not model:
+            # Fallback: parsing básico sin IA
+            return {
+                'message': raw_log[:200],
+                'log_level': 'INFO',
+                'source': source,
+                'raw': raw_log
+            }
+        
         try:
             prompt = f"""
             Analiza este log de seguridad y extrae la información relevante en formato JSON:
@@ -96,7 +115,7 @@ class SIEMAnalyzer:
                 reasons.append(f"IP maliciosa detectada: {ip} ({threat.description})")
         
         # 3. Patrones sospechosos con IA
-        if recent_count > 10:
+        if recent_count > 10 and GEMINI_AVAILABLE and model:
             log_messages = list(logs.filter(
                 timestamp__gte=timezone.now() - timedelta(minutes=5)
             ).values_list('message', flat=True)[:20])
@@ -454,6 +473,7 @@ def siem_dashboard_view(request):
     context = {
         'recent_logs': recent_logs,
         'stats': stats,
+        'organization': organization,
     }
     
-    return render(request, 'dashboard/siem.html', context)
+    return render(request, 'siem/dashboard.html', context)

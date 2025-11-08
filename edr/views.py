@@ -382,6 +382,7 @@ def edr_dashboard_view(request):
     context = {
         'agents': agents,
         'stats': stats,
+        'organization': organization,
     }
     
-    return render(request, 'dashboard/edr.html', context)
+    return render(request, 'edr/dashboard.html', context)
