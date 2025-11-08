@@ -1,30 +1,44 @@
 """
 URL Configuration for Jorise v2 - Enterprise SOC
-FULL PRODUCTION ROUTES
+FULL PRODUCTION ROUTES - API Backend
 """
 
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from core.auth_views import login_view, register_view, logout_view
-from core.dashboard_views import dashboard_view, subscription_management, settings_view
+from django.http import JsonResponse
+
+# Optional: Import views only if needed
+try:
+    from core.auth_views import login_view, register_view, logout_view
+    from core.dashboard_views import dashboard_view, subscription_management, settings_view
+except ImportError:
+    login_view = register_view = logout_view = None
+    dashboard_view = subscription_management = settings_view = None
+
+def api_health_check(request):
+    """API Health Check endpoint"""
+    return JsonResponse({
+        'status': 'ok',
+        'service': 'Jorise SOC API',
+        'version': '2.0',
+        'message': 'Backend is running successfully',
+        'endpoints': {
+            'admin': '/admin/',
+            'api': '/api/soc/<org_id>/',
+            'modules': ['/siem/', '/edr/', '/waf/', '/sandbox/']
+        }
+    })
 
 urlpatterns = [
+    # API Health Check
+    path('', api_health_check, name='api_health'),
+    
+    # Django Admin
     path('admin/', admin.site.urls),
     
-    # Authentication
-    path('', login_view, name='login'),
-    path('login/', login_view, name='login'),
-    path('register/', register_view, name='register'),
-    path('logout/', logout_view, name='logout'),
-    
-    # Dashboard
-    path('dashboard/', dashboard_view, name='dashboard'),
-    path('subscription/', subscription_management, name='subscription_management'),
-    path('settings/', settings_view, name='settings'),
-    
-    # Module dashboards
+    # Module dashboards (optional - for web interface)
     path('siem/', include('siem.urls')),
     path('edr/', include('edr.urls')),
     path('waf/', include('waf.urls')),
@@ -32,8 +46,18 @@ urlpatterns = [
     
     # API endpoints
     path('api/soc/<uuid:org_id>/', include('soc.urls')),
-    
 ]
+
+# Add auth routes if views are available
+if login_view:
+    urlpatterns.extend([
+        path('login/', login_view, name='login'),
+        path('register/', register_view, name='register'),
+        path('logout/', logout_view, name='logout'),
+        path('dashboard/', dashboard_view, name='dashboard'),
+        path('subscription/', subscription_management, name='subscription_management'),
+        path('settings/', settings_view, name='settings'),
+    ])
 
 # Serve media files in development
 if settings.DEBUG:
