@@ -137,7 +137,8 @@ CELERY_TIMEZONE = TIME_ZONE
 
 # AI Configuration
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
-OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
+# Legacy support (commented out)
+# OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 
 # Threat Intelligence
 VIRUSTOTAL_API_KEY = config('VIRUSTOTAL_API_KEY', default='')

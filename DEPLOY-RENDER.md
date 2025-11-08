@@ -60,6 +60,7 @@ Render detectará automáticamente Django. Configura:
 - `DEBUG` → `False`
 - `ALLOWED_HOSTS` → `.onrender.com,jorise.vineksec.online`
 - `PYTHON_VERSION` → `3.11.0`
+- `GEMINI_API_KEY` → (tu API key de Google Gemini)
 
 ### **Paso 5: Crear base de datos PostgreSQL**
 1. Clic en **"New +"** → **"PostgreSQL"**
