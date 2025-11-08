@@ -10,7 +10,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet
 import io
 from .models import Report
-from scan.models import ScanResult
+# LAZY IMPORT: ScanResult se importa donde se usa para evitar dependencias circulares
 
 
 def reports_list(request):
@@ -21,6 +21,8 @@ def reports_list(request):
 
 def generate_report(request):
     """Generar nuevo reporte"""
+    from scan.models import ScanResult  # Import aquí para evitar circular dependency
+    
     if request.method == 'POST':
         report_type = request.POST.get('report_type', 'summary')
         format_type = request.POST.get('format', 'html')
@@ -50,6 +52,7 @@ def generate_report(request):
             return generate_html_report(request, report)
     
     # GET request - mostrar formulario
+    from scan.models import ScanResult  # Import aquí también
     scans = ScanResult.objects.all()
     return render(request, 'reports/generate.html', {'scans': scans})
 

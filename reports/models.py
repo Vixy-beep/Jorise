@@ -1,6 +1,6 @@
 from django.db import models
 from django.utils import timezone
-from scan.models import ScanResult
+# LAZY IMPORT: ScanResult se importa en tiempo de ejecución para evitar dependencias circulares
 
 
 class Report(models.Model):
@@ -19,7 +19,7 @@ class Report(models.Model):
     report_type = models.CharField(max_length=20, choices=REPORT_TYPE_CHOICES)
     format = models.CharField(max_length=10, choices=FORMAT_CHOICES, default='html')
     
-    scan_results = models.ManyToManyField(ScanResult, related_name='reports')
+    scan_results = models.ManyToManyField('scan.ScanResult', related_name='reports')
     
     generated_date = models.DateTimeField(default=timezone.now)
     file_path = models.FileField(upload_to='reports/', blank=True, null=True)

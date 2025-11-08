@@ -1,7 +1,8 @@
 from rest_framework import serializers
-from scan.models import *
-from reports.models import *
-from core.models import *
+# LAZY IMPORTS: Models se referencian como strings o se importan donde se usan
+# from scan.models import *
+# from reports.models import *
+# from core.models import *
 
 class DashboardStatsSerializer(serializers.Serializer):
     """Serializer for dashboard statistics"""
