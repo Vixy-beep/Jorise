@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'sandbox',   # Malware Sandbox Analysis
     'training',  # ML Training Engine (PCAP / CSV)
     'risk',      # Gestión de Riesgos TI — ISO 27005
+    'knowledge', # RAG Knowledge Base — PDFs de seguridad
 ]
 
 MIDDLEWARE = [

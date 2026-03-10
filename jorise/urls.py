@@ -44,6 +44,9 @@ urlpatterns = [
 
     # Training REST API
     path('api/training/', include('training.api_urls')),
+
+    # Knowledge Base RAG
+    path('api/knowledge/', include('knowledge.urls')),
 ]
 
 # Add auth routes if views are available
