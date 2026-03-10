@@ -76,3 +76,6 @@ coverage.xml
 
 .venv/
 
+
+# Android app — separate repo
+jorise_mobile/
