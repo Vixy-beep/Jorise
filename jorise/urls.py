@@ -38,6 +38,8 @@ urlpatterns = [
     
     # API endpoints
     path('api/soc/<uuid:org_id>/', include('soc.urls')),
+    path('api/mobile/', include('risk.mobile_urls')),
+    path('api/risk/', include('risk.api_urls')),
 
     # Training module (PCAP / CSV)
     path('training/', include('training.urls')),

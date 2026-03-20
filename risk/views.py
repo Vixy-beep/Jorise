@@ -7,11 +7,28 @@ from django.shortcuts import render
 from django.http import JsonResponse, HttpResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
+from django.db import transaction
 from datetime import timedelta, date
 import json, csv
+from uuid import UUID
 
-from core.models import Organization, ITAsset, Risk, RiskReview, Vulnerability
+from core.models import (
+    Organization,
+    ITAsset,
+    Risk,
+    RiskReview,
+    Vulnerability,
+    RiskCase,
+    RiskEvidence,
+    RiskEngineVersionLog,
+)
+
+try:
+    from training.models import UnifiedModelVersion
+except Exception:
+    UnifiedModelVersion = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -669,3 +686,604 @@ def seed_demo(request):
         return JsonResponse({'success': True, 'message': f'Datos demo cargados: {len(risks_data)} riesgos, {len(assets_data)} activos, {len(vulns_data)} vulnerabilidades'})
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# API — MOBILE RISK FUSION (MVP bancario)
+# ─────────────────────────────────────────────────────────────────────────────
+
+RULES_ENGINE_VERSION = 'rules-1.0.0'
+FUSION_ENGINE_VERSION = 'fusion-1.0.0'
+
+
+def _clamp(value, min_value=0.0, max_value=100.0):
+    return max(min_value, min(max_value, float(value)))
+
+
+def _to_bool(value, default=False):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {'1', 'true', 'yes', 'y', 'on'}
+    return default
+
+
+def _to_int(value, default=0):
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def _normalize_snapshot(payload):
+    """Accept snake_case/camelCase payloads and return canonical snapshot."""
+    get = lambda *keys, default=None: next((payload[k] for k in keys if k in payload), default)
+
+    snapshot = {
+        'wifi_known': _to_bool(get('wifi_known', 'wifiKnown', default=True), default=True),
+        'vpn_active': _to_bool(get('vpn_active', 'vpnActive', default=False), default=False),
+        'developer_options': _to_bool(get('developer_options', 'devOptionsEnabled', default=False), default=False),
+        'unusual_hour': _to_bool(get('unusual_hour', 'unusualHour', default=False), default=False),
+        'overlay_detected': _to_bool(get('overlay_detected', 'overlayDetected', default=False), default=False),
+        'tls_valid': _to_bool(get('tls_valid', 'tlsValid', default=True), default=True),
+        'unknown_app_foreground': _to_bool(get('unknown_app_foreground', 'unknownAppForeground', default=False), default=False),
+        'new_sensitive_permission': _to_bool(get('new_sensitive_permission', 'newSensitivePermission', default=False), default=False),
+        'dns_standard': _to_bool(get('dns_standard', 'dnsStandard', default=True), default=True),
+        'recent_failed_logins': _to_int(get('recent_failed_logins', 'recentFailedLogins', default=0), default=0),
+        'sideload_detected': _to_bool(get('sideload_detected', 'sideloadDetected', default=False), default=False),
+    }
+    snapshot['recent_failed_logins'] = max(0, snapshot['recent_failed_logins'])
+    return snapshot
+
+
+def _rules_score(snapshot):
+    score = 0
+    reasons = []
+
+    if not snapshot['wifi_known']:
+        score += 12
+        reasons.append('Conexion en red WiFi no confiable')
+    if snapshot['vpn_active']:
+        score += 6
+        reasons.append('Uso de VPN detectado (revisar legitimidad)')
+    if snapshot['developer_options']:
+        score += 18
+        reasons.append('Developer options activadas')
+    if snapshot['unusual_hour']:
+        score += 8
+        reasons.append('Actividad en horario inusual')
+    if snapshot['overlay_detected']:
+        score += 40
+        reasons.append('Overlay detectado')
+    if not snapshot['tls_valid']:
+        score += 35
+        reasons.append('Sesion TLS no valida')
+    if snapshot['unknown_app_foreground']:
+        score += 15
+        reasons.append('App no reconocida en primer plano')
+    if snapshot['new_sensitive_permission']:
+        score += 18
+        reasons.append('Solicitud nueva de permisos sensibles')
+    if not snapshot['dns_standard']:
+        score += 12
+        reasons.append('DNS no estandar detectado')
+
+    failed_login_penalty = min(snapshot['recent_failed_logins'] * 10, 25)
+    if failed_login_penalty:
+        score += failed_login_penalty
+        reasons.append(f"Intentos de login fallidos recientes: {snapshot['recent_failed_logins']}")
+
+    if snapshot['overlay_detected'] and not snapshot['tls_valid']:
+        score += 20
+        reasons.append('Combinacion critica: OVERLAY + TLS invalido')
+    if snapshot['overlay_detected'] and snapshot['unknown_app_foreground']:
+        score += 15
+        reasons.append('Combinacion critica: OVERLAY + app desconocida')
+    if snapshot['sideload_detected'] and snapshot['new_sensitive_permission']:
+        score += 20
+        reasons.append('Combinacion critica: sideload + permisos sensibles')
+
+    return _clamp(score), reasons
+
+
+def _model_projection(snapshot):
+    """MVP proxy until direct mobile feature extraction to XGBoost is wired."""
+    if snapshot['overlay_detected'] and not snapshot['tls_valid']:
+        return 92.0, 'Bot', 0.92, 'Patron compatible con banking trojan (overlay + TLS invalido)'
+    if snapshot['recent_failed_logins'] >= 3 and snapshot['unusual_hour']:
+        return 80.0, 'BruteForce', 0.84, 'Patron de fuerza bruta en ventana temporal corta'
+    if snapshot['new_sensitive_permission'] and snapshot['unknown_app_foreground']:
+        return 78.0, 'Infiltration', 0.79, 'App potencialmente invasiva con permisos sensibles'
+    if (not snapshot['dns_standard']) and (not snapshot['wifi_known']):
+        return 74.0, 'Bot', 0.75, 'Actividad de red anomala asociada a posible C2'
+    if snapshot['sideload_detected']:
+        return 68.0, 'Infiltration', 0.70, 'Instalacion sideload con riesgo operacional'
+    return 18.0, 'Benign', 0.62, 'No se observa patron de ataque critico en el snapshot actual'
+
+
+def _anomaly_projection(snapshot):
+    rare_flags = 0
+    for key in ('overlay_detected', 'developer_options', 'unknown_app_foreground', 'sideload_detected'):
+        if snapshot.get(key):
+            rare_flags += 1
+    if not snapshot['dns_standard']:
+        rare_flags += 1
+    if snapshot['recent_failed_logins'] >= 3:
+        rare_flags += 1
+    return _clamp(rare_flags * 16)
+
+
+def _sequence_projection(snapshot):
+    seq = 0
+    if snapshot['recent_failed_logins'] >= 2:
+        seq += 35
+    if snapshot['recent_failed_logins'] >= 4:
+        seq += 20
+    if snapshot['new_sensitive_permission'] and snapshot['unknown_app_foreground']:
+        seq += 25
+    if snapshot['overlay_detected'] and snapshot['new_sensitive_permission']:
+        seq += 20
+    return _clamp(seq)
+
+
+def _impact_score(process_name, asset_criticality):
+    process_baseline = {
+        'payments': 90,
+        'transfers': 90,
+        'beneficiary_enrollment': 85,
+        'onboarding': 70,
+        'mobile_access': 65,
+        'support': 60,
+    }
+    crit_bonus = {'low': -10, 'medium': 0, 'high': 8, 'critical': 15}
+
+    base = process_baseline.get((process_name or '').strip().lower(), 60)
+    bonus = crit_bonus.get((asset_criticality or 'medium').strip().lower(), 0)
+    return _clamp(base + bonus)
+
+
+def _control_strength(snapshot):
+    control = 0
+    if snapshot['wifi_known']:
+        control += 30
+    if snapshot['tls_valid']:
+        control += 25
+    if snapshot['dns_standard']:
+        control += 20
+    if not snapshot['developer_options']:
+        control += 15
+    if snapshot['recent_failed_logins'] == 0:
+        control += 10
+    return _clamp(control)
+
+
+def _risk_band(score):
+    if score >= 85:
+        return 'critical'
+    if score >= 70:
+        return 'very_high'
+    if score >= 50:
+        return 'high'
+    if score >= 30:
+        return 'medium'
+    return 'low'
+
+
+def _recommended_action(level):
+    actions = {
+        'critical': 'Aislar red del dispositivo, bloquear sesion y abrir incidente SOC inmediato.',
+        'very_high': 'Aplicar contencion automatica parcial y escalar a analista Tier-2.',
+        'high': 'Requerir verificacion reforzada del usuario y monitoreo intensivo 30 minutos.',
+        'medium': 'Mantener monitoreo y solicitar chequeo de seguridad al usuario.',
+        'low': 'Sin bloqueo. Registrar evento para aprendizaje continuo.',
+    }
+    return actions.get(level, actions['low'])
+
+
+def _resolve_organization(payload):
+    raw_org_id = payload.get('organization_id') or payload.get('org_id')
+    if not raw_org_id:
+        return None
+    try:
+        org_uuid = UUID(str(raw_org_id))
+    except Exception:
+        return None
+    return Organization.objects.filter(id=org_uuid).first()
+
+
+def _get_active_model_version():
+    if UnifiedModelVersion is None:
+        return 'model-unavailable'
+    active = UnifiedModelVersion.get_active()
+    return f"unified-{active.version}" if active else 'model-none-active'
+
+
+def _ensure_engine_versions(model_version):
+    RiskEngineVersionLog.objects.get_or_create(
+        engine_type='rules', version=RULES_ENGINE_VERSION,
+        defaults={'is_active': True, 'notes': 'Baseline mobile ruleset for risk fusion endpoint.'}
+    )
+    RiskEngineVersionLog.objects.get_or_create(
+        engine_type='fusion', version=FUSION_ENGINE_VERSION,
+        defaults={'is_active': True, 'notes': 'Weighted fusion of rules, model, anomaly and sequence.'}
+    )
+    RiskEngineVersionLog.objects.get_or_create(
+        engine_type='model', version=model_version,
+        defaults={'is_active': True, 'notes': 'Model version consumed by mobile risk analyzer.'}
+    )
+
+
+def _serialize_engine_log(item):
+    return {
+        'id': str(item.id),
+        'engine_type': item.engine_type,
+        'version': item.version,
+        'is_active': item.is_active,
+        'checksum': item.checksum,
+        'notes': item.notes,
+        'created_by': item.created_by.username if item.created_by else None,
+        'created_at': item.created_at.isoformat() if item.created_at else None,
+    }
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def mobile_analyze(request):
+    """POST /api/mobile/analyze - Creates a RiskCase from mobile snapshot."""
+    try:
+        payload = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON payload'}, status=400)
+
+    snapshot = _normalize_snapshot(payload)
+    process_name = payload.get('process_name', 'mobile_access')
+    asset_criticality = payload.get('asset_criticality', 'medium')
+    device_id = str(payload.get('device_id') or payload.get('deviceId') or '')[:64]
+
+    rules_score, rule_reasons = _rules_score(snapshot)
+    model_score, attack_class, model_confidence, model_reason = _model_projection(snapshot)
+    anomaly_score = _anomaly_projection(snapshot)
+    sequence_score = _sequence_projection(snapshot)
+
+    final_likelihood = _clamp(
+        0.35 * rules_score +
+        0.35 * model_score +
+        0.15 * anomaly_score +
+        0.15 * sequence_score
+    )
+    impact_score = _impact_score(process_name, asset_criticality)
+    control_strength = _control_strength(snapshot)
+    residual_score = _clamp((0.45 * final_likelihood + 0.55 * impact_score) * (1 - control_strength / 100))
+
+    risk_level = _risk_band(residual_score)
+    recommended_action = _recommended_action(risk_level)
+    confidence = max(0.0, min(1.0, (model_confidence + (rules_score / 100.0)) / 2.0))
+
+    category_map = {
+        'Bot': 'App maliciosa / spyware',
+        'BruteForce': 'Intento de acceso no autorizado',
+        'Infiltration': 'APT / acceso persistente',
+        'PortScan': 'Reconocimiento de red',
+        'DoS': 'Consumo anormal de red',
+        'DDoS': 'Red comprometida / C2 activo',
+        'WebAttack': 'Phishing / inyeccion',
+        'Benign': 'Sin ataque critico identificado',
+    }
+    category = category_map.get(attack_class, 'Riesgo operacional')
+
+    model_version = _get_active_model_version()
+    _ensure_engine_versions(model_version)
+
+    explainability = {
+        'top_rule_reasons': rule_reasons[:6],
+        'model_reason': model_reason,
+        'weights': {'rules': 0.35, 'model': 0.35, 'anomaly': 0.15, 'sequence': 0.15},
+        'scores': {
+            'rules_score': round(rules_score, 2),
+            'model_score': round(model_score, 2),
+            'anomaly_score': round(anomaly_score, 2),
+            'sequence_score': round(sequence_score, 2),
+            'likelihood_score': round(final_likelihood, 2),
+            'impact_score': round(impact_score, 2),
+            'control_strength_score': round(control_strength, 2),
+            'residual_risk_score': round(residual_score, 2),
+        },
+    }
+
+    risk_case = RiskCase.objects.create(
+        organization=_resolve_organization(payload),
+        source_channel='mobile',
+        process_name=process_name,
+        attack_pattern=attack_class,
+        category=category,
+        asset_criticality=(asset_criticality or 'medium').lower(),
+        likelihood_score=final_likelihood,
+        impact_score=impact_score,
+        control_strength_score=control_strength,
+        residual_risk_score=residual_score,
+        confidence=confidence,
+        model_score=model_score,
+        rules_score=rules_score,
+        anomaly_score=anomaly_score,
+        sequence_score=sequence_score,
+        status='open',
+        recommended_action=recommended_action,
+        explainability_payload=explainability,
+        model_version=model_version,
+        rule_version=RULES_ENGINE_VERSION,
+        device_id=device_id,
+        raw_snapshot=snapshot,
+    )
+
+    RiskEvidence.objects.bulk_create([
+        RiskEvidence(risk_case=risk_case, evidence_type='input', payload={'payload': payload, 'snapshot': snapshot}),
+        RiskEvidence(risk_case=risk_case, evidence_type='scoring', payload=explainability['scores']),
+        RiskEvidence(risk_case=risk_case, evidence_type='decision', payload={
+            'risk_level': risk_level,
+            'recommended_action': recommended_action,
+            'attack_pattern': attack_class,
+            'category': category,
+            'confidence': round(confidence, 4),
+        }),
+    ])
+
+    return JsonResponse({
+        'success': True,
+        'risk_case_id': str(risk_case.id),
+        'attack_class': attack_class,
+        'category': category,
+        'risk_level': risk_level,
+        'confidence': round(confidence, 4),
+        'scores': explainability['scores'],
+        'recommended_action': recommended_action,
+        'model_version': model_version,
+        'rule_version': RULES_ENGINE_VERSION,
+    })
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def risk_case_api(request):
+    """GET /api/risk/case?id=<uuid> or list recent cases."""
+    risk_case_id = request.GET.get('id')
+
+    if risk_case_id:
+        try:
+            case = RiskCase.objects.get(id=risk_case_id)
+        except RiskCase.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'RiskCase not found'}, status=404)
+
+        evidences = list(case.evidences.order_by('created_at').values('evidence_type', 'payload', 'created_at'))
+        return JsonResponse({
+            'success': True,
+            'risk_case': {
+                'id': str(case.id),
+                'process_name': case.process_name,
+                'attack_pattern': case.attack_pattern,
+                'category': case.category,
+                'risk_level': _risk_band(case.residual_risk_score),
+                'residual_risk_score': case.residual_risk_score,
+                'likelihood_score': case.likelihood_score,
+                'impact_score': case.impact_score,
+                'control_strength_score': case.control_strength_score,
+                'confidence': case.confidence,
+                'recommended_action': case.recommended_action,
+                'status': case.status,
+                'model_version': case.model_version,
+                'rule_version': case.rule_version,
+                'device_id': case.device_id,
+                'created_at': case.created_at.isoformat(),
+                'evidences': [
+                    {
+                        'evidence_type': ev['evidence_type'],
+                        'payload': ev['payload'],
+                        'created_at': ev['created_at'].isoformat() if ev['created_at'] else None,
+                    }
+                    for ev in evidences
+                ],
+            },
+        })
+
+    status_filter = request.GET.get('status')
+    limit = min(max(_to_int(request.GET.get('limit', 25), 25), 1), 200)
+
+    qs = RiskCase.objects.all().order_by('-created_at')
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+
+    cases = [
+        {
+            'id': str(c.id),
+            'process_name': c.process_name,
+            'attack_pattern': c.attack_pattern,
+            'category': c.category,
+            'risk_level': _risk_band(c.residual_risk_score),
+            'residual_risk_score': c.residual_risk_score,
+            'status': c.status,
+            'confidence': c.confidence,
+            'created_at': c.created_at.isoformat(),
+        }
+        for c in qs[:limit]
+    ]
+    return JsonResponse({'success': True, 'count': len(cases), 'results': cases})
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def risk_engine_versions_api(request):
+    """GET /api/risk/engine-versions?engine_type=model|rules|fusion&active_only=1"""
+    engine_type = (request.GET.get('engine_type') or '').strip().lower()
+    active_only = request.GET.get('active_only') == '1'
+    limit = min(max(_to_int(request.GET.get('limit', 50), 50), 1), 500)
+
+    qs = RiskEngineVersionLog.objects.all().order_by('-created_at')
+    if engine_type:
+        valid_types = {choice[0] for choice in RiskEngineVersionLog.ENGINE_TYPE_CHOICES}
+        if engine_type not in valid_types:
+            return JsonResponse({'success': False, 'error': 'Invalid engine_type'}, status=400)
+        qs = qs.filter(engine_type=engine_type)
+    if active_only:
+        qs = qs.filter(is_active=True)
+
+    results = [_serialize_engine_log(item) for item in qs[:limit]]
+    return JsonResponse({'success': True, 'count': len(results), 'results': results})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def risk_engine_version_register_api(request):
+    """POST /api/risk/engine-versions/register - Registers a new version in the audit log."""
+    try:
+        payload = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON payload'}, status=400)
+
+    engine_type = str(payload.get('engine_type') or '').strip().lower()
+    version = str(payload.get('version') or '').strip()
+    notes = str(payload.get('notes') or '').strip()
+    checksum = str(payload.get('checksum') or '').strip()
+    is_active = bool(payload.get('is_active', False))
+
+    valid_types = {choice[0] for choice in RiskEngineVersionLog.ENGINE_TYPE_CHOICES}
+    if engine_type not in valid_types:
+        return JsonResponse({'success': False, 'error': 'engine_type must be one of rules, model, fusion'}, status=400)
+    if not version:
+        return JsonResponse({'success': False, 'error': 'version is required'}, status=400)
+
+    created_by = request.user if getattr(request, 'user', None) and request.user.is_authenticated else None
+
+    with transaction.atomic():
+        if is_active:
+            RiskEngineVersionLog.objects.filter(engine_type=engine_type, is_active=True).update(is_active=False)
+
+        obj, created = RiskEngineVersionLog.objects.get_or_create(
+            engine_type=engine_type,
+            version=version,
+            defaults={
+                'is_active': is_active,
+                'notes': notes,
+                'checksum': checksum,
+                'created_by': created_by,
+            },
+        )
+
+        if not created:
+            changed = False
+            if notes and notes != obj.notes:
+                obj.notes = notes
+                changed = True
+            if checksum and checksum != obj.checksum:
+                obj.checksum = checksum
+                changed = True
+            if is_active and not obj.is_active:
+                obj.is_active = True
+                changed = True
+            if created_by and not obj.created_by:
+                obj.created_by = created_by
+                changed = True
+            if changed:
+                obj.save()
+
+    return JsonResponse({
+        'success': True,
+        'created': created,
+        'engine_version': _serialize_engine_log(obj),
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def risk_engine_version_activate_api(request):
+    """POST /api/risk/engine-versions/activate - Marks one version as active by engine type."""
+    try:
+        payload = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Invalid JSON payload'}, status=400)
+
+    engine_type = str(payload.get('engine_type') or '').strip().lower()
+    version = str(payload.get('version') or '').strip()
+
+    valid_types = {choice[0] for choice in RiskEngineVersionLog.ENGINE_TYPE_CHOICES}
+    if engine_type not in valid_types:
+        return JsonResponse({'success': False, 'error': 'engine_type must be one of rules, model, fusion'}, status=400)
+    if not version:
+        return JsonResponse({'success': False, 'error': 'version is required'}, status=400)
+
+    with transaction.atomic():
+        target = RiskEngineVersionLog.objects.filter(engine_type=engine_type, version=version).first()
+        if target is None:
+            return JsonResponse({'success': False, 'error': 'Version not found for engine_type'}, status=404)
+
+        RiskEngineVersionLog.objects.filter(engine_type=engine_type, is_active=True).exclude(id=target.id).update(is_active=False)
+        if not target.is_active:
+            target.is_active = True
+            target.save(update_fields=['is_active'])
+
+    return JsonResponse({'success': True, 'engine_version': _serialize_engine_log(target)})
+
+
+@login_required
+@require_http_methods(["GET"])
+def risk_governance_summary_api(request):
+    """GET /api/risk/governance-summary - Aggregated risk governance data for executive dashboard."""
+    org, error = _require_org(request)
+    if error:
+        return error
+
+    now = timezone.now()
+    risk_cases = RiskCase.objects.filter(organization=org)
+    open_cases = risk_cases.exclude(status='closed')
+    critical_cases = open_cases.filter(residual_risk_score__gte=85)
+    high_cases = open_cases.filter(residual_risk_score__gte=70, residual_risk_score__lt=85)
+
+    if critical_cases.count() >= 3:
+        risk_status = 'critical'
+    elif critical_cases.count() >= 1 or high_cases.count() >= 3:
+        risk_status = 'high'
+    elif open_cases.count() >= 3:
+        risk_status = 'medium'
+    else:
+        risk_status = 'low'
+
+    active_model = RiskEngineVersionLog.objects.filter(engine_type='model', is_active=True).order_by('-created_at').first()
+    active_rules = RiskEngineVersionLog.objects.filter(engine_type='rules', is_active=True).order_by('-created_at').first()
+
+    trend_labels = []
+    trend_data = []
+    for i in range(6, -1, -1):
+        d = (now - timedelta(days=i)).date()
+        trend_labels.append(d.strftime('%d/%m'))
+        trend_data.append(risk_cases.filter(created_at__date=d, residual_risk_score__gte=70).count())
+
+    recent_cases = [
+        {
+            'id': str(rc.id),
+            'process_name': rc.process_name,
+            'category': rc.category or rc.attack_pattern or 'Riesgo operacional',
+            'score': round(rc.residual_risk_score, 1),
+            'status': rc.status,
+            'created_at': rc.created_at.isoformat(),
+        }
+        for rc in open_cases.order_by('-residual_risk_score', '-created_at')[:5]
+    ]
+
+    return JsonResponse({
+        'success': True,
+        'risk': {
+            'open_cases': open_cases.count(),
+            'critical_cases': critical_cases.count(),
+            'high_cases': high_cases.count(),
+            'status': risk_status,
+            'active_model_version': active_model.version if active_model else 'N/A',
+            'active_rules_version': active_rules.version if active_rules else 'N/A',
+        },
+        'trend': {
+            'labels': trend_labels,
+            'data': trend_data,
+        },
+        'recent_cases': recent_cases,
+    })

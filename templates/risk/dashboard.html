@@ -1,8 +1,17 @@
 ﻿{% extends "dashboard/base_dashboard.html" %}
 {% block title %}Gestión de Riesgos TI{% endblock %}
+{% block page_title %}Gestión de Riesgos TI{% endblock %}
+{% block page_subtitle %}ISO 27005 / NIST RMF — Registro de riesgos, activos, vulnerabilidades y gobernanza SIB{% endblock %}
 
-{% block content %}
-<div class="p-6 space-y-6" x-data="riskApp()" x-init="init()">
+{% block extra_css %}
+<style>
+  /* Fallback visual when utility CSS fails to load */
+  .risk-fallback svg[class*="w-"] { width: 1.1rem; height: 1.1rem; display: inline-block; }
+</style>
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="p-6 space-y-6 risk-fallback" x-data="riskApp()" x-init="init()">
 
   <!-- Header -->
   <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -18,6 +27,10 @@
       <button @click="openModal('createRisk')" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm flex items-center gap-2 transition">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
         Nuevo Riesgo
+      </button>
+      <button @click="activeTab='governance'; loadEngineVersions()" class="px-3 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-sm flex items-center gap-2 transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Vista SIB
       </button>
     </div>
   </div>
@@ -443,6 +456,96 @@
                     <button @click="openEditVuln(v)" class="text-indigo-400 hover:text-indigo-300 text-xs transition">Editar</button>
                     <button @click="deleteVuln(v.id)" class="text-red-500 hover:text-red-400 text-xs transition">✕</button>
                   </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════ TAB: GOBERNANZA SIB ════════════════════ -->
+  <div x-show="activeTab==='governance'" class="space-y-5">
+    <div class="bg-emerald-900/20 border border-emerald-700/40 rounded-xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div>
+        <h3 class="text-emerald-200 font-semibold">Gobernanza de Versiones de Motor (SIB)</h3>
+        <p class="text-emerald-100/70 text-sm mt-1">Bitacora auditable de reglas, modelos y motor de fusion para supervision regulatoria.</p>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <button @click="loadEngineVersions()" class="px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm transition">Refrescar</button>
+        <button @click="openModal('registerEngineVersion')" class="px-3 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-sm transition">Registrar version</button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="bg-gray-800/60 border border-gray-700/50 rounded-xl p-4">
+        <p class="text-gray-400 text-xs uppercase">Total versiones</p>
+        <p class="text-white text-2xl font-bold mt-1" x-text="engineVersions.length"></p>
+      </div>
+      <div class="bg-gray-800/60 border border-gray-700/50 rounded-xl p-4">
+        <p class="text-gray-400 text-xs uppercase">Modelos</p>
+        <p class="text-blue-300 text-2xl font-bold mt-1" x-text="engineCounts.model || 0"></p>
+      </div>
+      <div class="bg-gray-800/60 border border-gray-700/50 rounded-xl p-4">
+        <p class="text-gray-400 text-xs uppercase">Reglas</p>
+        <p class="text-orange-300 text-2xl font-bold mt-1" x-text="engineCounts.rules || 0"></p>
+      </div>
+      <div class="bg-gray-800/60 border border-gray-700/50 rounded-xl p-4">
+        <p class="text-gray-400 text-xs uppercase">Fusion</p>
+        <p class="text-purple-300 text-2xl font-bold mt-1" x-text="engineCounts.fusion || 0"></p>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap gap-3 items-center">
+      <select x-model="engineFilterType" @change="loadEngineVersions()" class="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500">
+        <option value="">Todos los motores</option>
+        <option value="model">Model</option>
+        <option value="rules">Rules</option>
+        <option value="fusion">Fusion</option>
+      </select>
+      <label class="flex items-center gap-2 text-sm text-gray-300">
+        <input type="checkbox" x-model="engineActiveOnly" @change="loadEngineVersions()" class="rounded bg-gray-800 border-gray-700 text-emerald-600 focus:ring-emerald-500">
+        Solo activos
+      </label>
+      <span class="text-xs text-gray-500">Vista de auditoria con trazabilidad de version, checksum, usuario y fecha.</span>
+    </div>
+
+    <div class="bg-gray-800/60 border border-gray-700/50 rounded-xl overflow-hidden">
+      <div x-show="loadingEngineVersions" class="p-8 text-center text-gray-400 text-sm">Cargando bitacora de versiones...</div>
+      <div x-show="!loadingEngineVersions && engineVersions.length===0" class="p-8 text-center text-gray-500 text-sm">No hay versiones registradas para este filtro.</div>
+      <div x-show="!loadingEngineVersions && engineVersions.length>0" class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-900/50 text-gray-400 uppercase text-xs">
+            <tr>
+              <th class="px-4 py-3 text-left">Motor</th>
+              <th class="px-4 py-3 text-left">Version</th>
+              <th class="px-4 py-3 text-left">Estado</th>
+              <th class="px-4 py-3 text-left">Checksum</th>
+              <th class="px-4 py-3 text-left">Notas</th>
+              <th class="px-4 py-3 text-left">Creado por</th>
+              <th class="px-4 py-3 text-left">Fecha</th>
+              <th class="px-4 py-3 text-left">Accion</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="ev in engineVersions" :key="ev.id">
+              <tr class="border-b border-gray-700/50 hover:bg-gray-700/20 transition-colors">
+                <td class="px-4 py-3">
+                  <span :class="engineTypeClass(ev.engine_type)" class="px-2 py-0.5 rounded-full text-xs font-semibold uppercase" x-text="ev.engine_type"></span>
+                </td>
+                <td class="px-4 py-3 text-white font-mono" x-text="ev.version"></td>
+                <td class="px-4 py-3">
+                  <span x-show="ev.is_active" class="bg-green-900/60 text-green-300 px-2 py-0.5 rounded-full text-xs font-semibold">Activo</span>
+                  <span x-show="!ev.is_active" class="bg-gray-700 text-gray-400 px-2 py-0.5 rounded-full text-xs">Historico</span>
+                </td>
+                <td class="px-4 py-3 text-xs text-gray-300 font-mono" x-text="ev.checksum || '—'"></td>
+                <td class="px-4 py-3 text-xs text-gray-300" x-text="ev.notes || '—'"></td>
+                <td class="px-4 py-3 text-xs text-gray-400" x-text="ev.created_by || 'system'"></td>
+                <td class="px-4 py-3 text-xs text-gray-400" x-text="fmtDateTime(ev.created_at)"></td>
+                <td class="px-4 py-3">
+                  <button x-show="!ev.is_active" @click="activateEngineVersion(ev.engine_type, ev.version)" class="px-2 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-xs transition">Activar</button>
+                  <span x-show="ev.is_active" class="text-emerald-300 text-xs font-semibold">En produccion</span>
                 </td>
               </tr>
             </template>
@@ -909,6 +1012,47 @@
           </div>
         </form>
       </div>
+
+      <!-- Register Engine Version -->
+      <div x-show="modal==='registerEngineVersion'" class="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg">
+        <div class="p-5 border-b border-gray-700 flex justify-between items-center">
+          <h3 class="text-white font-bold text-lg">Registrar Version de Motor</h3>
+          <button @click="modal=null" class="text-gray-400 hover:text-white">✕</button>
+        </div>
+        <form @submit.prevent="submitRegisterEngineVersion()" class="p-5 space-y-3">
+          <div>
+            <label class="text-gray-400 text-xs uppercase block mb-1">Tipo de motor *</label>
+            <select x-model="engineForm.engine_type" required class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-emerald-500">
+              <option value="model">Model</option>
+              <option value="rules">Rules</option>
+              <option value="fusion">Fusion</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-gray-400 text-xs uppercase block mb-1">Version *</label>
+            <input x-model="engineForm.version" required class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-emerald-500" placeholder="ej. unified-2026.03.20-r1">
+          </div>
+          <div>
+            <label class="text-gray-400 text-xs uppercase block mb-1">Checksum</label>
+            <input x-model="engineForm.checksum" class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-emerald-500" placeholder="sha256...">
+          </div>
+          <div>
+            <label class="text-gray-400 text-xs uppercase block mb-1">Notas</label>
+            <textarea x-model="engineForm.notes" rows="2" class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-emerald-500" placeholder="Motivo de cambio, alcance y validaciones..."></textarea>
+          </div>
+          <label class="flex items-center gap-2 text-sm text-gray-300">
+            <input type="checkbox" x-model="engineForm.is_active" class="rounded bg-gray-800 border-gray-700 text-emerald-600 focus:ring-emerald-500">
+            Marcar como version activa al registrar
+          </label>
+          <div class="flex gap-2 pt-2">
+            <button type="submit" :disabled="submitting" class="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition">
+              <span x-show="!submitting">Registrar version</span>
+              <span x-show="submitting">Guardando...</span>
+            </button>
+            <button type="button" @click="modal=null" class="px-6 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition">Cancelar</button>
+          </div>
+        </form>
+      </div>
     </div>
   </template>
 
@@ -925,7 +1069,8 @@
 </div>
 {% endblock %}
 
-{% block scripts %}
+{% block extra_js %}
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 <script>
 function riskApp() {
   return {
@@ -935,6 +1080,7 @@ function riskApp() {
       {id:'matrix',   label:'Matriz & Charts',   badge:null},
       {id:'assets',   label:'Activos TI',         badge:null},
       {id:'vulns',    label:'Vulnerabilidades',   badge:null,badgeClass:'bg-red-600'},
+      {id:'governance',label:'Gobernanza SIB',    badge:null,badgeClass:'bg-emerald-700'},
     ],
     stats: {},
     risks: [], loadingRisks: true,
@@ -951,6 +1097,10 @@ function riskApp() {
     assetForm: {name:'',asset_type:'server',criticality:'medium',owner:'',ip_address:'',location:''},
     vulnForm: {title:'',severity:'high',cvss_score:'',cve_id:'',asset_id:'',discovery_date:'',due_date:'',remediation_notes:''},
     editVulnForm: {}, editVulnId: null,
+    engineVersions: [], loadingEngineVersions: false,
+    engineFilterType: '', engineActiveOnly: false,
+    engineCounts: {model:0, rules:0, fusion:0},
+    engineForm: {engine_type:'model', version:'', checksum:'', notes:'', is_active:false},
     charts: {},
 
     // Matrix config
@@ -958,7 +1108,65 @@ function riskApp() {
     matrixCols: [{i:1,label:'1 Mínimo'},{i:2,label:'2 Menor'},{i:3,label:'3 Moderado'},{i:4,label:'4 Mayor'},{i:5,label:'5 Catastrófico'}],
 
     async init() {
-      await Promise.all([this.loadStats(), this.loadRisks(), this.loadAssets(), this.loadVulns()]);
+      await Promise.all([this.loadStats(), this.loadRisks(), this.loadAssets(), this.loadVulns(), this.loadEngineVersions()]);
+    },
+
+    async loadEngineVersions() {
+      this.loadingEngineVersions = true;
+      try {
+        const p = new URLSearchParams();
+        if (this.engineFilterType) p.set('engine_type', this.engineFilterType);
+        if (this.engineActiveOnly) p.set('active_only', '1');
+        p.set('limit', '200');
+        const r = await fetch('/api/risk/engine-versions?' + p.toString());
+        const d = await r.json();
+        this.engineVersions = d.results || [];
+        this.tabs[4].badge = this.engineVersions.filter(x => x.is_active).length || null;
+        this.engineCounts = {
+          model: this.engineVersions.filter(x => x.engine_type === 'model').length,
+          rules: this.engineVersions.filter(x => x.engine_type === 'rules').length,
+          fusion: this.engineVersions.filter(x => x.engine_type === 'fusion').length,
+        };
+      } catch(e) {
+        console.error('loadEngineVersions error:', e);
+      } finally {
+        this.loadingEngineVersions = false;
+      }
+    },
+
+    async activateEngineVersion(engineType, version) {
+      if (!confirm(`Activar version ${version} para ${engineType}?`)) return;
+      const r = await fetch('/api/risk/engine-versions/activate', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-CSRFToken':this.csrfToken()},
+        body:JSON.stringify({engine_type: engineType, version: version})
+      });
+      const d = await r.json();
+      if (d.success) {
+        this.showToast('Version activada en produccion','success');
+        await this.loadEngineVersions();
+      } else {
+        this.showToast(d.error || 'No se pudo activar la version','error');
+      }
+    },
+
+    async submitRegisterEngineVersion() {
+      this.submitting = true;
+      const r = await fetch('/api/risk/engine-versions/register', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-CSRFToken':this.csrfToken()},
+        body:JSON.stringify(this.engineForm)
+      });
+      const d = await r.json();
+      this.submitting = false;
+      if (d.success) {
+        this.modal = null;
+        this.engineForm = {engine_type:'model', version:'', checksum:'', notes:'', is_active:false};
+        this.showToast('Version registrada correctamente','success');
+        await this.loadEngineVersions();
+      } else {
+        this.showToast(d.error || 'No se pudo registrar la version','error');
+      }
     },
 
     async loadStats() {
@@ -1244,10 +1452,22 @@ function riskApp() {
       const base = s>=15?'bg-red-700/80 text-white':s>=10?'bg-orange-600/80 text-white':s>=5?'bg-yellow-600/80 text-white':'bg-blue-700/60 text-gray-200';
       return base;
     },
+    engineTypeClass(t) {
+      return {model:'bg-blue-900/60 text-blue-300',rules:'bg-orange-900/60 text-orange-300',fusion:'bg-purple-900/60 text-purple-300'}[t]||'bg-gray-700 text-gray-400';
+    },
     fmtDate(d) {
       if (!d) return '';
       const p = d.split('-');
       return p.length===3 ? `${p[2]}/${p[1]}/${p[0]}` : d;
+    },
+    fmtDateTime(dt) {
+      if (!dt) return '—';
+      const d = new Date(dt);
+      if (Number.isNaN(d.getTime())) return dt;
+      return d.toLocaleString('es-DO', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit',
+      });
     },
     csrfToken() {
       return document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith('csrftoken='))?.split('=')[1]||'';

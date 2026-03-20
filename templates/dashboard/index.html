@@ -170,6 +170,60 @@
         </a>
     </div>
     {% endif %}
+
+    <div class="glass-card p-6 border border-emerald-500/30">
+        <div class="flex items-center gap-4 mb-4">
+            <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
+                <span class="text-3xl">⚖️</span>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold">Risk & SIB Governance</h3>
+                <p class="text-sm text-gray-400">Modelo dinámico + bitácora de versiones (via API)</p>
+            </div>
+        </div>
+        <div class="mb-4">
+            <span id="risk-status-badge" class="text-xs px-2 py-1 rounded-full font-bold bg-gray-600/30 text-gray-300">
+                Estado actual: CARGANDO
+            </span>
+        </div>
+        <div class="space-y-2">
+            <div class="flex justify-between text-sm">
+                <span>Casos abiertos</span>
+                <span id="risk-open-cases" class="font-bold">-</span>
+            </div>
+            <div class="flex justify-between text-sm">
+                <span>Casos críticos</span>
+                <span id="risk-critical-cases" class="font-bold text-red-400">-</span>
+            </div>
+            <div class="flex justify-between text-sm">
+                <span>Casos altos</span>
+                <span id="risk-high-cases" class="font-bold text-orange-300">-</span>
+            </div>
+            <div class="flex justify-between text-sm">
+                <span>Modelo activo</span>
+                <span id="risk-model-version" class="font-mono text-xs text-blue-300">-</span>
+            </div>
+            <div class="flex justify-between text-sm">
+                <span>Reglas activas</span>
+                <span id="risk-rules-version" class="font-mono text-xs text-orange-300">-</span>
+            </div>
+        </div>
+        <div class="mt-4 p-3 rounded-lg bg-black/20 border border-white/10">
+            <p class="text-xs text-gray-400 mb-2">Tendencia 7 días (casos score ≥ 70)</p>
+            <div style="position:relative;height:110px;">
+                <canvas id="riskTrendChart"></canvas>
+            </div>
+        </div>
+        <div class="mt-4">
+            <p class="text-xs text-gray-400 mb-2">Casos reales actuales (top 5 por score)</p>
+            <div id="risk-cases-list" class="space-y-2">
+                <p class="text-xs text-gray-500">Cargando casos...</p>
+            </div>
+        </div>
+        <a href="/risk/" class="mt-4 block text-center py-2 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 transition-all">
+            Ver módulo de riesgos →
+        </a>
+    </div>
 </div>
 
 <!-- Recent Incidents -->
@@ -351,5 +405,115 @@ new Chart(attacksCtx, {
         }
     }
 });
+
+// ── Risk Governance (API-driven) ──────────────────────────────────────
+let riskTrendChart = null;
+
+function riskStatusBadgeClass(status) {
+    if (status === 'critical') return 'bg-red-600/30 text-red-300';
+    if (status === 'high') return 'bg-orange-600/30 text-orange-300';
+    if (status === 'medium') return 'bg-yellow-600/30 text-yellow-300';
+    return 'bg-green-600/30 text-green-300';
+}
+
+function fmtRiskDate(isoDate) {
+    const d = new Date(isoDate);
+    if (Number.isNaN(d.getTime())) return isoDate || '';
+    return d.toLocaleString('es-DO', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function renderRiskTrend(labels, data) {
+    const riskTrendEl = document.getElementById('riskTrendChart');
+    if (!riskTrendEl) return;
+    if (riskTrendChart) riskTrendChart.destroy();
+
+    riskTrendChart = new Chart(riskTrendEl, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Casos >= 70',
+                data: data,
+                borderColor: 'rgb(16, 185, 129)',
+                backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                fill: true,
+                tension: 0.35,
+                pointRadius: 2,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(255, 255, 255, 0.08)' },
+                    ticks: { color: 'rgba(255, 255, 255, 0.65)', precision: 0 }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { color: 'rgba(255, 255, 255, 0.65)' }
+                }
+            }
+        }
+    });
+}
+
+async function loadRiskGovernance() {
+    try {
+        const response = await fetch('/api/risk/governance-summary');
+        const data = await response.json();
+        if (!data.success) return;
+
+        const risk = data.risk || {};
+        const badge = document.getElementById('risk-status-badge');
+        if (badge) {
+            badge.className = `text-xs px-2 py-1 rounded-full font-bold ${riskStatusBadgeClass(risk.status)}`;
+            badge.textContent = `Estado actual: ${(risk.status || 'low').toUpperCase()}`;
+        }
+
+        const setText = (id, value) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+        };
+
+        setText('risk-open-cases', risk.open_cases ?? 0);
+        setText('risk-critical-cases', risk.critical_cases ?? 0);
+        setText('risk-high-cases', risk.high_cases ?? 0);
+        setText('risk-model-version', risk.active_model_version || 'N/A');
+        setText('risk-rules-version', risk.active_rules_version || 'N/A');
+
+        renderRiskTrend((data.trend || {}).labels || [], (data.trend || {}).data || []);
+
+        const list = document.getElementById('risk-cases-list');
+        if (list) {
+            const cases = data.recent_cases || [];
+            if (!cases.length) {
+                list.innerHTML = '<p class="text-xs text-gray-500">Sin casos abiertos en este momento.</p>';
+            } else {
+                list.innerHTML = cases.map(rc => {
+                    const color = rc.score >= 85 ? 'text-red-300' : (rc.score >= 70 ? 'text-orange-300' : 'text-blue-300');
+                    return `<div class="flex items-center justify-between text-xs bg-white/5 rounded-lg px-2 py-1.5">
+                        <div class="min-w-0 pr-2">
+                            <p class="text-gray-200 truncate">${rc.process_name} · ${rc.category}</p>
+                            <p class="text-gray-500">${fmtRiskDate(rc.created_at)}</p>
+                        </div>
+                        <span class="font-mono font-bold ${color}">${rc.score}</span>
+                    </div>`;
+                }).join('');
+            }
+        }
+    } catch (_) {
+        const badge = document.getElementById('risk-status-badge');
+        if (badge) {
+            badge.className = 'text-xs px-2 py-1 rounded-full font-bold bg-gray-600/30 text-gray-300';
+            badge.textContent = 'Estado actual: N/A';
+        }
+    }
+}
+
+loadRiskGovernance();
+setInterval(loadRiskGovernance, 60000);
 </script>
 {% endblock %}

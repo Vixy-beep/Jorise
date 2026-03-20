@@ -120,7 +120,7 @@ def dashboard_view(request):
         'chart_labels': json.dumps(chart_labels),
         'chart_data': json.dumps(chart_data),
         'attack_types_labels': json.dumps(attack_types_labels),
-        'attack_types_data': json.dumps(attack_types_data)
+        'attack_types_data': json.dumps(attack_types_data),
     }
     
     return render(request, 'dashboard/index.html', context)
